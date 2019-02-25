@@ -49,7 +49,6 @@ const sendRequest = (async (method, params) => {
       }
     }).then(({ result, error }) => {
       metrics.requestsResponseTime.observe(new Date() - startTime)
-      console.log(`${method}(${JSON.stringify(params)}) - time ${new Date() - startTime}`)
 
       if (error) {
         return Promise.reject(error)
@@ -70,13 +69,13 @@ const fetchBlock = async (block_index) => {
   })
 
   const blockHash = await sendRequest('getblockhash', [block_index])
-  const block = await sendRequest('getblock', [blockHash, false])
+  const block = await sendRequest('getblock', [blockHash, true])
 
   const transactions = await transactionsRequests
 
   return {
-    tx: transactions,
-    ...block
+    ...block,
+    tx: transactions
   }
 }
 
@@ -94,17 +93,14 @@ async function work() {
     requests.push(fetchBlock(blockToDownload))
 
     if (requests.length >= SEND_BATCH_SIZE || blockToDownload == currentBlock) {
-      const blocks = await Promise.all(requests).map(async (block) => {
+      const blocks = await Promise.all(requests).map((block) => {
         metrics.downloadedTransactionsCounter.inc(block.tx.length)
         metrics.downloadedBlocksCounter.inc()
-
-        console.log(block)
 
         return block
       })
 
       console.log(`Flushing blocks ${blocks[0].height}:${blocks[blocks.length - 1].height}`)
-      console.log(`Uncompressed payload: ${JSON.stringify(blocks).length}`)
       await exporter.sendDataWithKey(blocks, "height")
 
       lastProcessedPosition.blockNumber += blocks.length
